@@ -1,0 +1,87 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "myapp:latest"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout the source code from your version control system
+                // For example, using Git
+                git 'https://github.com/your-repo/your-project.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                script {
+                    echo 'Building the application...'
+                    bat '''
+                    echo Cleaning up previous build...
+                    if exist out rmdir /s /q out
+                    mkdir out
+                    
+                    if not exist src\\main\\java\\com\\example\\MyApp.java (
+                        echo Source file not found!
+                        exit /b 1
+                    )
+
+                    echo Building the project...
+                    javac -d out src\\main\\java\\com\\example\\MyApp.java
+
+                    echo Creating ZIP file...
+                    powershell -Command "Compress-Archive -Path out\\* -DestinationPath myapp.zip"
+
+                    echo Renaming ZIP file to JAR file...
+                    rename myapp.zip myapp.jar
+                    '''
+
+                    // Archive the build artifact (e.g., JAR file)
+                    archiveArtifacts artifacts: 'myapp.jar', fingerprint: true
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    echo 'Running tests...'
+                    bat '''
+                    echo Running tests...
+                    java -cp out org.junit.runner.JUnitCore com.example.MyAppTest
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    echo 'Deploying the application...'
+                    bat "docker build -t ${DOCKER_IMAGE} ."
+                }
+            }
+        }
+
+        stage('Release') {
+            steps {
+                script {
+                    echo 'Releasing the application...'
+                    bat 'git tag -a v1.0.0 -m "Release version 1.0.0"'
+                    bat 'git push origin v1.0.0'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
